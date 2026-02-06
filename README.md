@@ -119,31 +119,192 @@ Use `<content-factory-include-file>` to compose content from multiple files:
 
 Included files are recursively processed (filters and includes apply). Circular dependencies are detected and throw an error.
 
-### Transform Functions
+### Pipelines
 
-Each strategy's `transform` function receives processed files and returns output:
+Pipelines allow you to transform the content of an included file before it's inserted. This is useful for things like adjusting heading levels, removing specific lines, or wrapping content.
+
+1. **Define pipelines in your config:**
 
 ```js
-transform: ({ files, dir, root, config }) => {
+module.exports = defineConfig({
+  // ...
+  pipelines: {
+    "adjust-headings": ({ params, content }) => {
+      const level = parseInt(params[0] || "1", 10);
+      const prefix = "#".repeat(level);
+      // Note: use engine.readFile() if you need to pull in additional content
+      return {
+        content: content.replace(/^(#+)/gm, (match) => match + prefix),
+      };
+    },
+    "inject-header": async ({ content, engine, toolName, strategyName }) => {
+      const header = await engine.readFile("@/shared/header.md", {
+        toolName,
+        strategyName,
+      });
+      return {
+        content: header.content + "\n" + content,
+      };
+    },
+  },
+});
+```
+
+2. **Use pipelines in your include tags:**
+
+```md
+<content-factory-include-file path="./section.md" pipelines="adjust-headings(2), wrap-example" />
+```
+
+Pipelines are executed in order (left to right). Arguments are passed as strings. Each pipeline receives an `engine` instance for reading additional files.
+
+### Programmatic File Reading
+
+The `engine` instance is available in `transform`, `onFinish`, and `pipelines`. It provides two methods for reading files with full preprocessing (visibility filters, includes, and optional pipelines):
+
+#### `engine.readFile(path, options)` — Read a Single File
+
+Returns a `SourceFile` with preprocessed content.
+
+```js
+transform: async ({ files, engine }) => {
+  // Relative to project root
+  const header = await engine.readFile("src/shared/header.md", {
+    toolName: "claude",
+    strategyName: "rules",
+  });
+
+  // Root-relative (@/ syntax)
+  const footer = await engine.readFile("@/shared/footer.md", {
+    toolName: "claude",
+    strategyName: "rules",
+  });
+
+  // With pipelines applied after preprocessing
+  const section = await engine.readFile("src/section.md", {
+    toolName: "claude",
+    strategyName: "rules",
+    pipelines: "adjust-headings(2), wrap-example",
+  });
+
+  return {
+    files: [
+      {
+        path: "dist/output.md",
+        content:
+          header.content + "\n" + section.content + "\n" + footer.content,
+      },
+    ],
+  };
+};
+```
+
+**Path resolution for `readFile`:**
+
+- `src/file.md` — relative to project root
+- `@/shared/file.md` — relative to project root (explicit)
+- `/absolute/path.md` — absolute path
+
+#### `engine.readFiles(patterns, options)` — Read Multiple Files via Glob
+
+Returns `SourceFile[]` with preprocessed content for all matched files.
+
+```js
+transform: async ({ engine }) => {
+  const extras = await engine.readFiles(["src/extras/**/*.md"], {
+    toolName: "claude",
+    strategyName: "rules",
+  });
+
+  // With pipelines applied to every matched file
+  const sections = await engine.readFiles(["src/sections/**/*.md"], {
+    toolName: "claude",
+    strategyName: "rules",
+    pipelines: "adjust-headings(1)",
+  });
+
+  return {
+    files: extras.map((f) => ({
+      path: `dist/claude/${f.name}`,
+      content: f.content,
+    })),
+  };
+};
+```
+
+#### `SourceFile` Shape
+
+Both methods return objects with this shape:
+
+```ts
+interface SourceFile {
+  name: string; // e.g. "coding.md"
+  content: string; // Preprocessed content
+  path: string; // Absolute path
+  relativePath: string; // Path relative to project root
+  extension: string; // e.g. ".md"
+}
+```
+
+#### Standalone Usage (Outside `engine.run`)
+
+You can also use `readFile` and `readFiles` without running the full build:
+
+```js
+const { Engine, defineConfig } = require("content-factory");
+
+const config = defineConfig({
+  tools: {
+    /* ... */
+  },
+  pipelines: {
+    /* ... */
+  },
+});
+const engine = new Engine(config, process.cwd());
+
+const file = await engine.readFile("src/rules/coding.md", {
+  toolName: "claude",
+  strategyName: "rules",
+  pipelines: "uppercase",
+});
+console.log(file.content);
+```
+
+### Transform Functions
+
+Each strategy's `transform` function receives processed files and an `engine` instance:
+
+```js
+transform: ({ files, dir, root, config, engine }) => {
   return {
     files: [{ path: "output.md", content: "..." }],
     metadata: {
       /* passed to onFinish */
     },
+    // Optional: Glob patterns of files to delete
+    deleteFiles: ["dist/**/*.tmp"],
   };
 };
 ```
 
 ### onFinish Hook
 
-Run logic after all strategies complete for a tool:
+Run logic after all strategies complete for a tool. Also receives the `engine` instance:
 
 ```js
 {
   strategies: [...],
-  onFinish: ({ metadata }) => {
-    // Generate index, combine outputs, etc.
-    return [{ path: "dist/index.md", content: "..." }];
+  onFinish: async ({ metadata, engine }) => {
+    const index = await engine.readFile("@/templates/index.md", {
+      toolName: "claude",
+      strategyName: "finalize",
+    });
+
+    return {
+      files: [{ path: "dist/index.md", content: index.content }],
+      deleteFiles: ["dist/temp/**/*"]
+    };
   }
 }
 ```

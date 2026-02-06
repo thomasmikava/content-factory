@@ -192,7 +192,7 @@ describe("Engine", () => {
       expect(subCall?.files[0].name).toBe("sub.md");
     });
 
-    it("should call onFinish with collected metadata", async () => {
+    it("should call onFinish with collected metadata and engine", async () => {
       await fs.writeFile(path.join(tempDir, "a.md"), "A");
 
       const onFinishFn = vi.fn().mockReturnValue([]);
@@ -220,6 +220,7 @@ describe("Engine", () => {
 
       expect(onFinishFn).toHaveBeenCalledWith({
         metadata: [{ processed: "a.md" }],
+        engine: engine,
       });
     });
 
@@ -236,12 +237,14 @@ describe("Engine", () => {
                 transform: () => ({ files: [] }),
               },
             ],
-            onFinish: () => [
-              {
-                path: path.join(tempDir, "final.txt"),
-                content: "Final Output",
-              },
-            ],
+            onFinish: () => ({
+              files: [
+                {
+                  path: path.join(tempDir, "final.txt"),
+                  content: "Final Output",
+                },
+              ],
+            }),
           },
         },
       };
@@ -331,7 +334,7 @@ describe("Engine", () => {
       );
     });
 
-    it("should provide correct context to transform", async () => {
+    it("should provide correct context to transform including engine", async () => {
       await fs.writeFile(path.join(tempDir, "test.md"), "Content");
 
       let capturedContext: TransformContext | null = null;
@@ -359,6 +362,7 @@ describe("Engine", () => {
         true,
       );
       expect(capturedContext!.config).toBe(config);
+      expect(capturedContext!.engine).toBe(engine);
       expect(
         getPathVariants(capturedContext!.files[0].path).includes(
           path.join(tempDir, "test.md"),
@@ -494,6 +498,522 @@ describe("Engine", () => {
       await engine.run();
 
       expect(transformFn).not.toHaveBeenCalled();
+    });
+
+    it("should delete files specified in transform result", async () => {
+      await fs.writeFile(path.join(tempDir, "test.md"), "Content");
+      await fs.writeFile(path.join(tempDir, "file-to-delete.txt"), "delete me");
+
+      const config: TransmuteConfig = {
+        tools: {
+          testTool: {
+            strategies: [
+              {
+                name: "test",
+                matches: ["**/*.md"],
+                transform: () => ({
+                  files: [],
+                  deleteFiles: ["**/*.txt"],
+                }),
+              },
+            ],
+          },
+        },
+      };
+
+      const engine = new Engine(config, tempDir);
+      await engine.run();
+
+      const files = await fs.readdir(tempDir);
+      expect(files).not.toContain("file-to-delete.txt");
+      expect(files).toContain("test.md");
+    });
+
+    it("should delete files specified in onFinish result", async () => {
+      await fs.writeFile(path.join(tempDir, "test.md"), "Content");
+      await fs.writeFile(path.join(tempDir, "file-to-delete.txt"), "delete me");
+
+      const config: TransmuteConfig = {
+        tools: {
+          testTool: {
+            strategies: [
+              {
+                name: "test",
+                matches: ["**/*.md"],
+                transform: () => ({ files: [] }),
+              },
+            ],
+            onFinish: () => ({
+              files: [],
+              deleteFiles: ["**/*.txt"],
+            }),
+          },
+        },
+      };
+
+      const engine = new Engine(config, tempDir);
+      await engine.run();
+
+      const files = await fs.readdir(tempDir);
+      expect(files).not.toContain("file-to-delete.txt");
+      expect(files).toContain("test.md");
+    });
+  });
+
+  describe("readFile", () => {
+    it("should read a file relative to project root", async () => {
+      await fs.writeFile(path.join(tempDir, "test.md"), "Hello World");
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const result = await engine.readFile("test.md", {
+        toolName: "claude",
+        strategyName: "default",
+      });
+
+      expect(result.name).toBe("test.md");
+      expect(result.content).toBe("Hello World");
+      expect(result.relativePath).toBe("test.md");
+      expect(result.extension).toBe(".md");
+      expect(path.isAbsolute(result.path)).toBe(true);
+    });
+
+    it("should read a file with @/ root-relative path", async () => {
+      const subDir = path.join(tempDir, "shared");
+      await fs.mkdir(subDir);
+      await fs.writeFile(path.join(subDir, "header.md"), "Header");
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const result = await engine.readFile("@/shared/header.md", {
+        toolName: "claude",
+        strategyName: "default",
+      });
+
+      expect(result.name).toBe("header.md");
+      expect(result.content).toBe("Header");
+    });
+
+    it("should read a file with absolute path", async () => {
+      const filePath = path.join(tempDir, "absolute.md");
+      await fs.writeFile(filePath, "Absolute");
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const result = await engine.readFile(filePath, {
+        toolName: "claude",
+        strategyName: "default",
+      });
+
+      expect(result.name).toBe("absolute.md");
+      expect(result.content).toBe("Absolute");
+    });
+
+    it("should apply visibility filters", async () => {
+      await fs.writeFile(
+        path.join(tempDir, "filtered.md"),
+        `Common<content-factory-filter include="claude">Claude Only</content-factory-filter><content-factory-filter include="roo">Roo Only</content-factory-filter>`,
+      );
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const claudeResult = await engine.readFile("filtered.md", {
+        toolName: "claude",
+        strategyName: "default",
+      });
+      expect(claudeResult.content).toBe("CommonClaude Only");
+
+      const rooResult = await engine.readFile("filtered.md", {
+        toolName: "roo",
+        strategyName: "default",
+      });
+      expect(rooResult.content).toBe("CommonRoo Only");
+    });
+
+    it("should resolve file includes", async () => {
+      await fs.writeFile(path.join(tempDir, "partial.md"), "Included");
+      await fs.writeFile(
+        path.join(tempDir, "main.md"),
+        `Before-<content-factory-include-file path="./partial.md" />-After`,
+      );
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const result = await engine.readFile("main.md", {
+        toolName: "claude",
+        strategyName: "default",
+      });
+
+      expect(result.content).toBe("Before-Included-After");
+    });
+
+    it("should apply pipelines when specified", async () => {
+      await fs.writeFile(path.join(tempDir, "source.md"), "hello world");
+
+      const config: TransmuteConfig = {
+        tools: {},
+        pipelines: {
+          uppercase: async () => ({
+            content: "HELLO WORLD",
+          }),
+        },
+      };
+      const engine = new Engine(config, tempDir);
+
+      const result = await engine.readFile("source.md", {
+        toolName: "claude",
+        strategyName: "default",
+        pipelines: "uppercase",
+      });
+
+      expect(result.content).toBe("HELLO WORLD");
+    });
+
+    it("should apply chained pipelines", async () => {
+      await fs.writeFile(path.join(tempDir, "source.md"), "hello");
+
+      const config: TransmuteConfig = {
+        tools: {},
+        pipelines: {
+          "append-world": async () => ({
+            content: "hello world",
+          }),
+          uppercase: async () => ({
+            content: "HELLO WORLD",
+          }),
+        },
+      };
+      const engine = new Engine(config, tempDir);
+
+      const result = await engine.readFile("source.md", {
+        toolName: "claude",
+        strategyName: "default",
+        pipelines: "append-world, uppercase",
+      });
+
+      expect(result.content).toBe("HELLO WORLD");
+    });
+
+    it("should not apply pipelines when not specified", async () => {
+      await fs.writeFile(path.join(tempDir, "source.md"), "original");
+
+      const pipelineFn = vi.fn(async () => ({ content: "MODIFIED" }));
+
+      const config: TransmuteConfig = {
+        tools: {},
+        pipelines: { uppercase: pipelineFn },
+      };
+      const engine = new Engine(config, tempDir);
+
+      const result = await engine.readFile("source.md", {
+        toolName: "claude",
+        strategyName: "default",
+      });
+
+      expect(result.content).toBe("original");
+      expect(pipelineFn).not.toHaveBeenCalled();
+    });
+
+    it("should throw when file does not exist", async () => {
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      await expect(
+        engine.readFile("nonexistent.md", {
+          toolName: "claude",
+          strategyName: "default",
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("should pass engine to pipelines", async () => {
+      await fs.writeFile(path.join(tempDir, "source.md"), "content");
+
+      const pipelineFn = vi.fn(async () => ({ content: "piped" }));
+
+      const config: TransmuteConfig = {
+        tools: {},
+        pipelines: { test: pipelineFn },
+      };
+      const engine = new Engine(config, tempDir);
+
+      await engine.readFile("source.md", {
+        toolName: "claude",
+        strategyName: "default",
+        pipelines: "test",
+      });
+
+      expect(pipelineFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          engine: engine,
+        }),
+      );
+    });
+
+    it("should be usable from within a transform", async () => {
+      await fs.writeFile(path.join(tempDir, "extra.md"), "Extra Content");
+      await fs.writeFile(path.join(tempDir, "input.md"), "Input");
+
+      const config: TransmuteConfig = {
+        tools: {
+          testTool: {
+            strategies: [
+              {
+                name: "test",
+                matches: ["**/input.md"],
+                transform: async ({ files, engine }) => {
+                  const extra = await engine.readFile("extra.md", {
+                    toolName: "testTool",
+                    strategyName: "test",
+                  });
+                  return {
+                    files: [
+                      {
+                        path: path.join(tempDir, "output.md"),
+                        content: files[0].content + "+" + extra.content,
+                      },
+                    ],
+                  };
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      const engine = new Engine(config, tempDir);
+      await engine.run();
+
+      const output = await fs.readFile(
+        path.join(tempDir, "output.md"),
+        "utf-8",
+      );
+      expect(output).toBe("Input+Extra Content");
+    });
+
+    it("should be usable from within onFinish", async () => {
+      await fs.writeFile(path.join(tempDir, "template.md"), "Template Content");
+      await fs.writeFile(path.join(tempDir, "input.md"), "Input");
+
+      const config: TransmuteConfig = {
+        tools: {
+          testTool: {
+            strategies: [
+              {
+                name: "test",
+                matches: ["**/input.md"],
+                transform: () => ({ files: [] }),
+              },
+            ],
+            onFinish: async ({ engine }) => {
+              const tpl = await engine.readFile("template.md", {
+                toolName: "testTool",
+                strategyName: "finalize",
+              });
+              return {
+                files: [
+                  {
+                    path: path.join(tempDir, "final.md"),
+                    content: tpl.content,
+                  },
+                ],
+              };
+            },
+          },
+        },
+      };
+
+      const engine = new Engine(config, tempDir);
+      await engine.run();
+
+      const output = await fs.readFile(path.join(tempDir, "final.md"), "utf-8");
+      expect(output).toBe("Template Content");
+    });
+  });
+
+  describe("readFiles", () => {
+    it("should read files matching glob patterns", async () => {
+      await fs.writeFile(path.join(tempDir, "a.md"), "A");
+      await fs.writeFile(path.join(tempDir, "b.md"), "B");
+      await fs.writeFile(path.join(tempDir, "c.txt"), "C");
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const results = await engine.readFiles(["**/*.md"], {
+        toolName: "claude",
+        strategyName: "default",
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results.map((f) => f.name).sort()).toEqual(["a.md", "b.md"]);
+      expect(results.every((f) => f.extension === ".md")).toBe(true);
+      expect(results.every((f) => path.isAbsolute(f.path))).toBe(true);
+    });
+
+    it("should read files matching multiple patterns", async () => {
+      await fs.writeFile(path.join(tempDir, "a.md"), "A");
+      await fs.writeFile(path.join(tempDir, "b.txt"), "B");
+      await fs.writeFile(path.join(tempDir, "c.js"), "C");
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const results = await engine.readFiles(["**/*.md", "**/*.txt"], {
+        toolName: "claude",
+        strategyName: "default",
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results.map((f) => f.name).sort()).toEqual(["a.md", "b.txt"]);
+    });
+
+    it("should apply visibility filters to each file", async () => {
+      await fs.writeFile(
+        path.join(tempDir, "file.md"),
+        `Common<content-factory-filter include="claude">Claude</content-factory-filter>`,
+      );
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const claudeResults = await engine.readFiles(["**/*.md"], {
+        toolName: "claude",
+        strategyName: "default",
+      });
+      expect(claudeResults[0].content).toBe("CommonClaude");
+
+      const rooResults = await engine.readFiles(["**/*.md"], {
+        toolName: "roo",
+        strategyName: "default",
+      });
+      expect(rooResults[0].content).toBe("Common");
+    });
+
+    it("should resolve includes in each file", async () => {
+      await fs.writeFile(path.join(tempDir, "partial.md"), "Partial");
+      await fs.writeFile(
+        path.join(tempDir, "main.md"),
+        `Main-<content-factory-include-file path="./partial.md" />`,
+      );
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const results = await engine.readFiles(["**/main.md"], {
+        toolName: "claude",
+        strategyName: "default",
+      });
+
+      expect(results[0].content).toBe("Main-Partial");
+    });
+
+    it("should apply pipelines to each matched file", async () => {
+      await fs.writeFile(path.join(tempDir, "a.md"), "hello");
+      await fs.writeFile(path.join(tempDir, "b.md"), "world");
+
+      const config: TransmuteConfig = {
+        tools: {},
+        pipelines: {
+          uppercase: async () => ({ content: "UPPERCASED" }),
+        },
+      };
+      const engine = new Engine(config, tempDir);
+
+      const results = await engine.readFiles(["**/*.md"], {
+        toolName: "claude",
+        strategyName: "default",
+        pipelines: "uppercase",
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results.every((f) => f.content === "UPPERCASED")).toBe(true);
+    });
+
+    it("should return empty array when no files match", async () => {
+      await fs.writeFile(path.join(tempDir, "file.txt"), "text");
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const results = await engine.readFiles(["**/*.md"], {
+        toolName: "claude",
+        strategyName: "default",
+      });
+
+      expect(results).toHaveLength(0);
+    });
+
+    it("should find files in nested directories", async () => {
+      const nested = path.join(tempDir, "a", "b");
+      await fs.mkdir(nested, { recursive: true });
+      await fs.writeFile(path.join(nested, "deep.md"), "Deep");
+
+      const config: TransmuteConfig = { tools: {} };
+      const engine = new Engine(config, tempDir);
+
+      const results = await engine.readFiles(["**/*.md"], {
+        toolName: "claude",
+        strategyName: "default",
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe("deep.md");
+      expect(results[0].content).toBe("Deep");
+      expect(results[0].relativePath).toBe(path.join("a", "b", "deep.md"));
+    });
+
+    it("should be usable from within a transform", async () => {
+      const extrasDir = path.join(tempDir, "extras");
+      await fs.mkdir(extrasDir);
+      await fs.writeFile(path.join(extrasDir, "x.md"), "X");
+      await fs.writeFile(path.join(extrasDir, "y.md"), "Y");
+      await fs.writeFile(path.join(tempDir, "input.md"), "Input");
+
+      const config: TransmuteConfig = {
+        tools: {
+          testTool: {
+            strategies: [
+              {
+                name: "test",
+                matches: ["input.md"],
+                transform: async ({ engine }) => {
+                  const extras = await engine.readFiles(["extras/**/*.md"], {
+                    toolName: "testTool",
+                    strategyName: "test",
+                  });
+                  const combined = extras
+                    .map((f) => f.content)
+                    .sort()
+                    .join("+");
+                  return {
+                    files: [
+                      {
+                        path: path.join(tempDir, "output.md"),
+                        content: combined,
+                      },
+                    ],
+                  };
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      const engine = new Engine(config, tempDir);
+      await engine.run();
+
+      const output = await fs.readFile(
+        path.join(tempDir, "output.md"),
+        "utf-8",
+      );
+      expect(output).toBe("X+Y");
     });
   });
 });

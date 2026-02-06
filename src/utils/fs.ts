@@ -39,6 +39,35 @@ export async function writeFiles(
   );
 }
 
+export async function deleteFiles(
+  patterns: string[],
+  root: string,
+  logger: Logger,
+) {
+  if (!patterns || patterns.length === 0) return;
+
+  const filesToDelete = await fg(patterns, {
+    cwd: root,
+    absolute: true,
+    dot: true,
+  });
+
+  if (filesToDelete.length === 0) return;
+
+  logger.log(`[Transmute] Deleting ${filesToDelete.length} files...`);
+
+  await Promise.all(
+    filesToDelete.map(async (filePath) => {
+      try {
+        await fs.unlink(filePath);
+        logger.log(`  - Deleted: ${filePath}`);
+      } catch (err) {
+        logger.error(`  ! Failed to delete: ${filePath}`, err);
+      }
+    }),
+  );
+}
+
 export function removePathStartSegments(
   inputPath: string,
   count: number = 1,

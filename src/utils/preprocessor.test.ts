@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Preprocessor } from "./preprocessor";
 import fs from "fs/promises";
 import path from "path";
@@ -21,6 +21,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -32,6 +33,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -43,6 +45,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -54,6 +57,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -65,6 +69,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -76,6 +81,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "roo",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -87,6 +93,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "copilot",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -98,6 +105,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -109,6 +117,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -120,6 +129,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -131,6 +141,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -142,6 +153,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -153,6 +165,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -164,6 +177,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: path.join(tempDir, "test.md"),
       });
@@ -182,6 +196,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -200,6 +215,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -221,6 +237,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -238,6 +255,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -255,6 +273,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -273,6 +292,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -287,6 +307,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -307,6 +328,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -332,6 +354,7 @@ describe("Preprocessor", () => {
         Preprocessor.process({
           content,
           toolName: "claude",
+          strategyName: "default",
           rootPath: tempDir,
           currentFilePath: mainFile,
         }),
@@ -349,6 +372,7 @@ describe("Preprocessor", () => {
         Preprocessor.process({
           content: `<content-factory-include-file path="./self.md" />`,
           toolName: "claude",
+          strategyName: "default",
           rootPath: tempDir,
           currentFilePath: path.join(tempDir, "main.md"),
         }),
@@ -364,6 +388,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -393,6 +418,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -413,6 +439,7 @@ describe("Preprocessor", () => {
       const result = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -433,6 +460,7 @@ describe("Preprocessor", () => {
       const resultClaude = await Preprocessor.process({
         content,
         toolName: "claude",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
@@ -442,11 +470,130 @@ describe("Preprocessor", () => {
       const resultRoo = await Preprocessor.process({
         content,
         toolName: "roo",
+        strategyName: "default",
         rootPath: tempDir,
         currentFilePath: mainFile,
       });
 
       expect(resultRoo).toBe("Middle--Middle");
+    });
+  });
+
+  describe("Pipelines", () => {
+    it("should execute pipelines on included content", async () => {
+      await fs.writeFile(
+        path.join(tempDir, "source.md"),
+        "line1\nline2\nline3",
+      );
+
+      const mainFile = path.join(tempDir, "main.md");
+      const content = `<content-factory-include-file path="./source.md" pipelines="uppercase" />`;
+
+      const pipelines = {
+        uppercase: vi.fn(
+          async ({ pipelineName, toolName, strategyName, params }) => {
+            return { content: "LINE1\nLINE2\nLINE3" };
+          },
+        ),
+      };
+
+      const result = await Preprocessor.process({
+        content,
+        toolName: "claude",
+        strategyName: "default",
+        rootPath: tempDir,
+        currentFilePath: mainFile,
+        pipelines,
+      });
+
+      expect(result).toBe("LINE1\nLINE2\nLINE3");
+      expect(pipelines.uppercase).toHaveBeenCalledWith({
+        pipelineName: "uppercase",
+        toolName: "claude",
+        strategyName: "default",
+        params: [],
+        engine: undefined,
+      });
+    });
+
+    it("should execute multiple pipelines in order", async () => {
+      await fs.writeFile(path.join(tempDir, "source.md"), "hello");
+
+      const mainFile = path.join(tempDir, "main.md");
+      const content = `<content-factory-include-file path="./source.md" pipelines="append-world, uppercase" />`;
+
+      const pipelines = {
+        "append-world": vi.fn(async () => {
+          return { content: "hello world" };
+        }),
+        uppercase: vi.fn(async () => {
+          return { content: "HELLO WORLD" };
+        }),
+      };
+
+      const result = await Preprocessor.process({
+        content,
+        toolName: "claude",
+        strategyName: "default",
+        rootPath: tempDir,
+        currentFilePath: mainFile,
+        pipelines,
+      });
+
+      expect(result).toBe("HELLO WORLD");
+      expect(pipelines["append-world"]).toHaveBeenCalled();
+      expect(pipelines.uppercase).toHaveBeenCalled();
+    });
+
+    it("should handle pipeline parameters", async () => {
+      await fs.writeFile(path.join(tempDir, "source.md"), "content");
+
+      const mainFile = path.join(tempDir, "main.md");
+      const content = `<content-factory-include-file path="./source.md" pipelines="wrap(start, end)" />`;
+
+      const pipelines = {
+        wrap: vi.fn(async ({ params }) => {
+          return { content: `${params[0]}content${params[1]}` };
+        }),
+      };
+
+      const result = await Preprocessor.process({
+        content,
+        toolName: "claude",
+        strategyName: "default",
+        rootPath: tempDir,
+        currentFilePath: mainFile,
+        pipelines,
+      });
+
+      expect(result).toBe("startcontentend");
+      expect(pipelines.wrap).toHaveBeenCalledWith(
+        expect.objectContaining({
+          params: ["start", "end"],
+        }),
+      );
+    });
+
+    it("should skip pipeline if it returns void", async () => {
+      await fs.writeFile(path.join(tempDir, "source.md"), "original");
+
+      const mainFile = path.join(tempDir, "main.md");
+      const content = `<content-factory-include-file path="./source.md" pipelines="noop" />`;
+
+      const pipelines = {
+        noop: vi.fn(() => {}),
+      };
+
+      const result = await Preprocessor.process({
+        content,
+        toolName: "claude",
+        strategyName: "default",
+        rootPath: tempDir,
+        currentFilePath: mainFile,
+        pipelines,
+      });
+
+      expect(result).toBe("original");
     });
   });
 });

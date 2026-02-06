@@ -46,3 +46,4 @@ if (require.main === module) {
 
 export * from "./types";
 export * from "./core/engine";
+export * from "./config";

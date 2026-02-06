@@ -11,6 +11,8 @@ import {
   Strategy,
   ToolConfig,
   TransmuteConfig,
+  IEngine,
+  ReadFileOptions,
 } from "./types";
 
 describe("Index Exports", () => {
@@ -31,7 +33,7 @@ describe("Index Exports", () => {
     };
     const transformResult: TransformResult = { files: [] };
     const transformFn: TransformFn = () => ({ files: [] });
-    const onFinishFn: OnFinishFn = () => [];
+    const onFinishFn: OnFinishFn = () => ({ files: [] });
     const strategy: Strategy = {
       name: "test",
       matches: [],
@@ -39,11 +41,23 @@ describe("Index Exports", () => {
     };
     const toolConfig: ToolConfig = { strategies: [] };
     const transmuteConfig: TransmuteConfig = { tools: {} };
+
+    const mockEngine: IEngine = {
+      readFile: async () => sourceFile,
+      readFiles: async () => [sourceFile],
+    };
+
     const transformContext: TransformContext = {
       files: [],
       dir: "/",
       root: "/",
       config: transmuteConfig,
+      engine: mockEngine,
+    };
+
+    const readFileOptions: ReadFileOptions = {
+      toolName: "claude",
+      strategyName: "rules",
     };
 
     // These are runtime checks to ensure the code compiles
@@ -56,5 +70,7 @@ describe("Index Exports", () => {
     expect(toolConfig).toBeDefined();
     expect(transmuteConfig).toBeDefined();
     expect(transformContext).toBeDefined();
+    expect(readFileOptions).toBeDefined();
+    expect(mockEngine).toBeDefined();
   });
 });

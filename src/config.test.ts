@@ -1,6 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { defineConfig, defineTool } from "./config";
-import { TransmuteConfig, ToolConfig } from "./types";
+import { TransmuteConfig, ToolConfig, IEngine, SourceFile } from "./types";
+
+const mockSourceFile: SourceFile = {
+  name: "mock",
+  content: "",
+  path: "/mock",
+  relativePath: "mock",
+  extension: ".md",
+};
+
+const mockEngine: IEngine = {
+  readFile: async () => mockSourceFile,
+  readFiles: async () => [mockSourceFile],
+};
 
 describe("Config Helpers", () => {
   describe("defineConfig", () => {
@@ -46,7 +59,7 @@ describe("Config Helpers", () => {
     });
 
     it("should accept config with onFinish handler", () => {
-      const onFinish = () => [];
+      const onFinish = () => ({ files: [] });
       const config: TransmuteConfig = {
         tools: {
           test: {
@@ -123,7 +136,9 @@ describe("Config Helpers", () => {
     });
 
     it("should accept tool with onFinish handler", () => {
-      const onFinish = () => [{ path: "output.txt", content: "test" }];
+      const onFinish = () => ({
+        files: [{ path: "output.txt", content: "test" }],
+      });
       const toolConfig: ToolConfig = {
         strategies: [],
         onFinish,
@@ -135,7 +150,7 @@ describe("Config Helpers", () => {
     });
 
     it("should accept tool with async onFinish", () => {
-      const asyncOnFinish = async () => [];
+      const asyncOnFinish = async () => ({ files: [] });
       const toolConfig: ToolConfig = {
         strategies: [],
         onFinish: asyncOnFinish,
@@ -144,6 +159,21 @@ describe("Config Helpers", () => {
       const result = defineTool(toolConfig);
 
       expect(result.onFinish).toBe(asyncOnFinish);
+    });
+
+    it("should accept tool with onFinish returning deleteFiles", () => {
+      const onFinish = () => ({
+        files: [],
+        deleteFiles: ["dist/**/*.tmp"],
+      });
+      const toolConfig: ToolConfig = {
+        strategies: [],
+        onFinish,
+      };
+
+      const result = defineTool(toolConfig);
+
+      expect(result.onFinish).toBe(onFinish);
     });
 
     it("should accept strategy with metadata in transform result", () => {
@@ -168,9 +198,38 @@ describe("Config Helpers", () => {
         dir: "/test",
         root: "/",
         config: { tools: {} },
+        engine: mockEngine,
       });
 
       expect(transformResult).toHaveProperty("metadata");
+    });
+
+    it("should accept strategy with deleteFiles in transform result", () => {
+      const transform = () => ({
+        files: [],
+        deleteFiles: ["dist/**/*.tmp"],
+      });
+
+      const toolConfig: ToolConfig = {
+        strategies: [
+          {
+            name: "with-delete",
+            matches: ["**/*.md"],
+            transform,
+          },
+        ],
+      };
+
+      const result = defineTool(toolConfig);
+      const transformResult = result.strategies[0].transform({
+        files: [],
+        dir: "/test",
+        root: "/",
+        config: { tools: {} },
+        engine: mockEngine,
+      });
+
+      expect(transformResult).toHaveProperty("deleteFiles");
     });
   });
 });

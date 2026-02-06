@@ -1,12 +1,16 @@
 import fs from "fs/promises";
 import path from "path";
+import { IEngine, PipelineFn } from "../types";
 
 interface PreprocessOptions {
   content: string;
   toolName: string;
+  strategyName: string;
+  pipelines?: Record<string, PipelineFn>;
   rootPath: string;
   currentFilePath: string;
   visitedFiles?: Set<string>;
+  engine?: IEngine;
 }
 
 export class Preprocessor {
@@ -38,9 +42,12 @@ export class Preprocessor {
     //    This resolves file references in the remaining content
     text = await this.processIncludes(text, {
       toolName: options.toolName,
+      strategyName: options.strategyName,
+      pipelines: options.pipelines,
       rootPath: options.rootPath,
       currentFilePath: normalizedCurrentPath,
       visitedFiles: visitedFiles,
+      engine: options.engine,
     });
 
     // Remove current file from visited set (allows the same file to be included in different branches)
@@ -57,28 +64,37 @@ export class Preprocessor {
     text: string,
     options: {
       toolName: string;
+      strategyName: string;
+      pipelines?: Record<string, PipelineFn>;
       rootPath: string;
       currentFilePath: string;
       visitedFiles: Set<string>;
+      engine?: IEngine;
     },
   ): Promise<string> {
-    // Regex to match <content-factory-include-file path="..." /> or <content-factory-include-file path="..."></content-factory-include-file>
+    // Regex to match <content-factory-include-file path="..." pipelines="..." />
+    // Path is always first, pipelines is optional.
     const includeRegex =
-      /<content-factory-include-file\s+path\s*=\s*["']([^"']+)["']\s*(?:\/>|><\/content-factory-include-file>)/g;
+      /<content-factory-include-file\s+path\s*=\s*["']([^"']+)["'](?:\s+pipelines\s*=\s*["']([^"']+)["'])?\s*(?:\/>|><\/content-factory-include-file>)/g;
 
     // Find all matches first to process them
-    const matches: Array<{ fullMatch: string; filePath: string }> = [];
+    const matches: Array<{
+      fullMatch: string;
+      filePath: string;
+      pipelinesStr?: string;
+    }> = [];
     let match;
 
     while ((match = includeRegex.exec(text)) !== null) {
       matches.push({
         fullMatch: match[0],
         filePath: match[1],
+        pipelinesStr: match[2],
       });
     }
 
     // Process each match
-    for (const { fullMatch, filePath } of matches) {
+    for (const { fullMatch, filePath, pipelinesStr } of matches) {
       const resolvedPath = this.resolvePath(
         filePath,
         options.rootPath,
@@ -99,13 +115,28 @@ export class Preprocessor {
       }
 
       // Recursively process the included file
-      const processedContent = await this.process({
+      let processedContent = await this.process({
         content: includedContent,
         toolName: options.toolName,
+        strategyName: options.strategyName,
+        pipelines: options.pipelines,
         rootPath: options.rootPath,
         currentFilePath: resolvedPath,
         visitedFiles: options.visitedFiles,
+        engine: options.engine,
       });
+
+      // Execute pipelines if present
+      if (pipelinesStr && options.pipelines) {
+        processedContent = await this.executePipelines(
+          processedContent,
+          pipelinesStr,
+          options.pipelines,
+          options.toolName,
+          options.strategyName,
+          options.engine,
+        );
+      }
 
       text = text.replace(fullMatch, processedContent);
     }
@@ -114,12 +145,107 @@ export class Preprocessor {
   }
 
   /**
+   * Parses and executes a chain of pipelines on the content.
+   */
+  static async executePipelines(
+    content: string,
+    pipelinesStr: string,
+    availablePipelines: Record<string, PipelineFn>,
+    toolName: string,
+    strategyName: string,
+    engine?: IEngine,
+  ): Promise<string> {
+    const pipelinesToRun = this.parsePipelineString(pipelinesStr);
+    let currentContent = content;
+
+    for (const { name, params } of pipelinesToRun) {
+      const pipelineFn = availablePipelines[name];
+      if (!pipelineFn) {
+        console.warn(`[Transmute] Warning: Pipeline '${name}' not found.`);
+        continue;
+      }
+
+      try {
+        const result = await pipelineFn({
+          content,
+          pipelineName: name,
+          toolName,
+          strategyName,
+          params,
+          engine: engine as IEngine,
+        });
+
+        // If pipeline returns void, it's skipped (content remains unchanged)
+        // If it returns an object with content, update the content
+        if (result && typeof result.content === "string") {
+          currentContent = result.content;
+        }
+      } catch (error) {
+        console.error(`[Transmute] Error executing pipeline '${name}':`, error);
+        // On error, we might want to keep the content as is or throw.
+        // For now, let's keep going and log the error.
+      }
+    }
+
+    return currentContent;
+  }
+
+  /**
+   * Parses a pipeline string like "remove-nth-line(5,true),add-line"
+   * into [{ name: "remove-nth-line", params: ["5", "true"] }, { name: "add-line", params: [] }]
+   */
+  static parsePipelineString(
+    input: string,
+  ): Array<{ name: string; params: string[] }> {
+    const result: Array<{ name: string; params: string[] }> = [];
+    let current = "";
+    let depth = 0;
+
+    const pushCurrent = () => {
+      const trimmed = current.trim();
+      if (!trimmed) return;
+
+      // Check for params in parentheses
+      const parenStart = trimmed.indexOf("(");
+      if (parenStart !== -1 && trimmed.endsWith(")")) {
+        const name = trimmed.substring(0, parenStart).trim();
+        const paramsStr = trimmed.substring(parenStart + 1, trimmed.length - 1);
+        // Split params by comma, handling potential commas in quotes (though simple CSV for now)
+        // For now assuming simple params without commas inside them
+        const params = paramsStr
+          .split(",")
+          .map((p) => p.trim())
+          .filter((p) => p.length > 0);
+        result.push({ name, params });
+      } else {
+        result.push({ name: trimmed, params: [] });
+      }
+      current = "";
+    };
+
+    for (let i = 0; i < input.length; i++) {
+      const char = input[i];
+      if (char === "(") depth++;
+      else if (char === ")") depth--;
+
+      if (char === "," && depth === 0) {
+        pushCurrent();
+      } else {
+        current += char;
+      }
+    }
+    pushCurrent();
+
+    return result;
+  }
+
+  /**
    * Resolves a file path that can be:
    * - Absolute (starts with /)
    * - Root-relative (starts with @/)
    * - Relative to current file (starts with ./ or ../ or just a name)
    */
-  private static resolvePath(
+  static resolvePath(
     filePath: string,
     rootPath: string,
     currentFilePath: string,
